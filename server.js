@@ -3,13 +3,28 @@ import express from "express";
 import mongoose from "mongoose";
 import dbMessages from "./dbMessages.js";
 import Messages from "./dbMessages.js";
+import Pusher from "pusher";
 
 // app config
 const app = express();
 const port = process.env.PORT || 4000;
 
+const pusher = new Pusher({
+  appId: "1073277",
+  key: "3bdd7e7034a952e266c9",
+  secret: "7985afe2e3161f807ad0",
+  cluster: "ap2",
+  encrypted: true,
+});
+
 // middlewares
 app.use(express.json());
+
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  next();
+});
 
 // DB config
 const connectionURL =
@@ -18,6 +33,28 @@ mongoose.connect(connectionURL, {
   useCreateIndex: true,
   useNewUrlParser: true,
   useUnifiedTopology: true,
+});
+
+const db = mongoose.connection;
+
+db.once("open", () => {
+  console.log("DB is connected");
+  const msgCollection = db.collection("messagecontents");
+  const changeStream = msgCollection.watch();
+
+  changeStream.on("change", (change) => {
+    console.log(change);
+
+    if (change.operationType === "insert") {
+      const messageDetails = change.fullDocument;
+      pusher.trigger("messsages", "inserted", {
+        name: messageDetails.name,
+        message: messageDetails.message,
+      });
+    } else {
+      console.log("error trigerring pusher");
+    }
+  });
 });
 
 // ????
